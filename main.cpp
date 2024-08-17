@@ -17,66 +17,72 @@ path operator""_p(const char* data, std::size_t sz) {
 bool ProcessRecursInclude(ifstream& input, ofstream& output, const path& current_file, const vector<path>& include_directories) {
     string line;
     int line_num = 1;
-    regex include_pattern(R"(\s*#\s*include\s*(<|")(.*?)(>|")\s*)");
+    regex include_pattern_angle(R"(\s*#\s*include\s*<([^>]*)>\s*)");
+    regex include_pattern_quotes(R"(\s*#\s*include\s*\"([^"]*)\"\s*)");
 
-    while(getline(input, line)) {
+    while (getline(input, line)) {
         smatch match;
-        if(regex_search(line, match, include_pattern)) {
-            path path_inc(match[2].str());
-            path path_ex;
-
-            if(match[1].str() == "\"") {
-                path_ex = current_file.parent_path() / path_inc;
-                if(!exists(path_ex)) {
-                    bool file_found = false;
-                    for(const auto& dir : include_directories) {
-                        path path_poten = dir / path_inc;
-                        if(exists(path_poten)) {
-                            path_ex = path_poten;
-                            file_found = true;
-                            break;
-                        }
-                    }
-
-                    if (!file_found) {
-                        cout << "unknown include file " << path_inc.string()
-                             << " at file " << current_file.string()
-                             << " at line " << line_num << endl;
-                        return false;
-                    }
-                }
-            } else {
-                bool file_found = false;
-                for(const auto& dir : include_directories) {
-                    path path_poten = dir / path_inc;
-                    if(exists(path_poten)) {
-                        path_ex = path_poten;
-                        file_found = true;
+        path path_ex;
+        if (regex_search(line, match, include_pattern_quotes)) {
+            path path_inc(match[1].str());
+            path_ex = current_file.parent_path() / path_inc;
+            bool found_file = exists(path_ex);
+            if (!found_file) {
+                for (const auto& dir : include_directories) {
+                    path path_pot = dir / path_inc;
+                    if (exists(path_pot)) {
+                        path_ex = path_pot;
+                        found_file = true;
                         break;
                     }
                 }
-                if (!file_found) {
-                    cout << "unknown include file " << path_inc.string()
-                         << " at file " << current_file.string()
-                         << " at line " << line_num << endl;
-                    return false;
-                }
             }
-
-            ifstream file_include (path_ex);
-            if(!file_include.is_open()) {
-                cout << "Failed to open file " << path_ex.string()
+            if (!found_file) {
+                cout <<  "unknown include file " << path_inc.string()
                      << " at file " << current_file.string()
                      << " at line " << line_num << endl;
                 return false;
             }
-
-            if(!ProcessRecursInclude(file_include, output, path_ex, include_directories)) {
+        }
+        else if (regex_search(line, match, include_pattern_angle)) {
+            path path_inc(match[1].str());
+            path_ex = current_file.parent_path() / path_inc;
+            bool found_file = exists(path_ex);
+            if (!found_file) {
+                for (const auto& dir : include_directories) {
+                    path path_pot = dir / path_inc;
+                    if (exists(path_pot)) {
+                        path_ex = path_pot;
+                        found_file = true;
+                        break;
+                    }
+                }
+            }
+            if (!found_file) {
+                cout <<  "unknown include file " << path_inc.string()
+                     << " at file " << current_file.string()
+                     << " at line " << line_num << endl;
                 return false;
             }
-        } else {
-            output << line << endl;
         }
+        else {
+            output << line << endl;
+            ++line_num;
+            continue;
+        }
+
+        ifstream file_include(path_ex);
+        if (!file_include.is_open()) {
+            cout << "Failed to open file " << path_ex.string()
+                 << " at file " << current_file.string()
+                 << " at line " << line_num << endl;
+            return false;
+        }
+
+        if (!ProcessRecursInclude(file_include, output, path_ex, include_directories)) {
+            return false;
+        }
+
         ++line_num;
     }
     return true;
